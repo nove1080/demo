@@ -3,3 +3,6 @@ spring:
     name: demo
   profiles:
     include: secret
+
+server:
+  port: 8081
