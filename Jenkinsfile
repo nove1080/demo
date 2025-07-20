@@ -29,18 +29,21 @@ pipeline {
                 }
             }
         }
+        stage('Test') {
+            steps {
+                echo 'Running tests...'
+                dir('./backend') {
+                    sh './gradlew test'
+                }
+            }
+        }
         stage('Build Project') {
             steps {
                 echo 'build project...'
                 dir('./backend') {
                     sh 'chmod +x ./gradlew'
-                    sh './gradlew clean build'
+                    sh './gradlew clean build -x test'
                 }
-            }
-        }
-        stage('Test') {
-            steps {
-                echo 'Running tests...'
             }
         }
         stage('Send JAR File To Deploy Server') {
@@ -55,10 +58,7 @@ pipeline {
                         chmod 644 ~/.ssh/known_hosts
 
                         scp $WORKSPACE/backend/build/libs/*.jar $user_name@$deploy_server:/home/$user_name/demo/target
-                        echo "send jar file complete!"
-
                         scp $WORKSPACE/backend/$deploy_script $user_name@$deploy_server:/home/$user_name/demo/target/
-                        echo "send deploy_script complete!"
                     '''
                 }
             }
@@ -68,35 +68,50 @@ pipeline {
                 echo 'deploy...'
                 sshagent(credentials: ['AWS_KEY']) {
                     sh '''
-                        ssh -o StrictHostKeyChecking=no $user_name@$deploy_server "cd demo/target && bash deploy.sh"
+                        ssh -o StrictHostKeyChecking=no $user_name@$deploy_server "cd demo/target && bash $deploy_script"
                     '''
                 }
             }
         }
     }
-post {
-    success {
-        script {
-            def Author_ID = sh(script: "git show -s --pretty=%an", returnStdout: true).trim()
-            def Author_Name = sh(script: "git show -s --pretty=%ae", returnStdout: true).trim()
-            mattermostSend (
-                color: 'good',
-                message: "빌드 성공: ${env.JOB_NAME} #${env.BUILD_NUMBER} by ${Author_ID}(${Author_Name})\n(<${env.BUILD_URL}|Details>)",
-                endpoint: "${mattermost_url}",
-                channel: "${mattermost_channel}"
-            )
+    post {
+        success {
+            script {
+                dir('./backend') {
+                    def author = sh(script: "git show -s --pretty=%an", returnStdout: true).trim()
+                    def commitMsg = sh(script: "git log -1 --pretty=%B", returnStdout: true).trim()
+                    def msg = "✅ [Build Success] ${env.JOB_NAME} #${env.BUILD_NUMBER}\n" +
+                              "👨‍💻 Author: ${author}\n" +
+                              "📝 Commit: ${commitMsg}\n" +
+                              "📦 Branch: $branch\n" +
+                              "🔗 <${env.BUILD_URL}|Build Details>"
+                    mattermostSend (
+                        color: 'good',
+                        message: msg,
+                        endpoint: "${mattermost_url}",
+                        channel: "${mattermost_channel}"
+                    )
+                }
+            }
         }
-    }
-    failure {
-        script {
-            def Author_ID = sh(script: "git show -s --pretty=%an", returnStdout: true).trim()
-            def Author_Name = sh(script: "git show -s --pretty=%ae", returnStdout: true).trim()
-            mattermostSend (
-                color: 'danger',
-                message: "빌드 실패: ${env.JOB_NAME} #${env.BUILD_NUMBER} by ${Author_ID}(${Author_Name})\n(<${env.BUILD_URL}|Details>)",
-                endpoint: "${mattermost_url}",
-                channel: "${mattermost_channel}"
-            )
+        failure {
+            script {
+                dir('./backend') {
+                    def author = sh(script: "git show -s --pretty=%an", returnStdout: true).trim()
+                    def commitMsg = sh(script: "git log -1 --pretty=%B", returnStdout: true).trim()
+                    def msg = "❌ [Build Failure] ${env.JOB_NAME} #${env.BUILD_NUMBER}\n" +
+                              "👨‍💻 Author: ${author}\n" +
+                              "📝 Commit: ${commitMsg}\n" +
+                              "📦 Branch: $branch\n" +
+                              "🔗 <${env.BUILD_URL}|Build Details>"
+                    mattermostSend (
+                        color: 'danger',
+                        message: msg,
+                        endpoint: "${mattermost_url}",
+                        channel: "${mattermost_channel}"
+                    )
+                }
+            }
         }
     }
 }
