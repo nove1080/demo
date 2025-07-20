@@ -2,6 +2,7 @@ pipeline {
     agent any
     environment {
         deploy_server = '54.180.120.45'
+        deploy_dir = '/home/ubuntu/demo/target'
         user_name = 'ubuntu'
         project_name = 'demo'
         git_url='https://github.com/nove1080/demo.git'
@@ -33,6 +34,7 @@ pipeline {
             steps {
                 echo 'Running tests...'
                 dir('./backend') {
+                    sh 'chmod +x ./gradlew'
                     sh './gradlew test'
                 }
             }
@@ -57,8 +59,8 @@ pipeline {
                         ssh-keyscan $deploy_server >> ~/.ssh/known_hosts
                         chmod 644 ~/.ssh/known_hosts
 
-                        scp $WORKSPACE/backend/build/libs/*.jar $user_name@$deploy_server:/home/$user_name/demo/target
-                        scp $WORKSPACE/backend/$deploy_script $user_name@$deploy_server:/home/$user_name/demo/target/
+                        scp $WORKSPACE/backend/build/libs/*.jar $user_name@$deploy_server:$deploy_dir
+                        scp $WORKSPACE/backend/$deploy_script $user_name@$deploy_server:$deploy_dir
                     '''
                 }
             }
@@ -80,11 +82,10 @@ pipeline {
                 dir('./backend') {
                     def author = sh(script: "git show -s --pretty=%an", returnStdout: true).trim()
                     def commitMsg = sh(script: "git log -1 --pretty=%B", returnStdout: true).trim()
-                    def msg = "✅ [Build Success] ${env.JOB_NAME} #${env.BUILD_NUMBER}\n" +
+                    def msg = "✅ [Build Success] <${env.BUILD_URL}|${env.JOB_NAME} #${env.BUILD_NUMBER}>\n" +
                               "👨‍💻 Author: ${author}\n" +
                               "📝 Commit: ${commitMsg}\n" +
-                              "📦 Branch: $branch\n" +
-                              "🔗 <${env.BUILD_URL}|Build Details>"
+                              "📦 Branch: $branch"
                     mattermostSend (
                         color: 'good',
                         message: msg,
@@ -99,11 +100,10 @@ pipeline {
                 dir('./backend') {
                     def author = sh(script: "git show -s --pretty=%an", returnStdout: true).trim()
                     def commitMsg = sh(script: "git log -1 --pretty=%B", returnStdout: true).trim()
-                    def msg = "❌ [Build Failure] ${env.JOB_NAME} #${env.BUILD_NUMBER}\n" +
+                    def msg = "❌ [Build Failure] <${env.BUILD_URL}|${env.JOB_NAME} #${env.BUILD_NUMBER}>\n" +
                               "👨‍💻 Author: ${author}\n" +
                               "📝 Commit: ${commitMsg}\n" +
-                              "📦 Branch: $branch\n" +
-                              "🔗 <${env.BUILD_URL}|Build Details>"
+                              "📦 Branch: $branch"
                     mattermostSend (
                         color: 'danger',
                         message: msg,
